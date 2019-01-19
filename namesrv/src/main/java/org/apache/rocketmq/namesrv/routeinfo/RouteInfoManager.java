@@ -52,6 +52,7 @@ public class RouteInfoManager {
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    // BrokeLiveInfo里面有channel，所以livetable保存了brokerAddr对应的channel，那谁来维护呢？
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
@@ -99,6 +100,22 @@ public class RouteInfoManager {
         return topicList.encode();
     }
 
+    /**
+     * 注册做的事情
+     * 1）每次注册的时候会先将该broker添加到clusterAddrTable集群里面，clustertable value是set类型，所以旧的broker会被直接替换掉。
+     * 2）然后将broker添加到brokerAddr集合中，brokerAddr的value是一个hashmap，因为一个broker可以是主备，所以一个brokername会有多个addr。
+     * 3）如果注册的这个broker为master节点，且版本号（每个注册上来的broker都会携带版本号）变动了的话就通知客户端broker有变。
+     * 4）将该broker添加到livetable中，表示该节点可用
+     * @param clusterName
+     * @param brokerAddr
+     * @param brokerName
+     * @param brokerId
+     * @param haServerAddr
+     * @param topicConfigWrapper
+     * @param filterServerList
+     * @param channel
+     * @return
+     */
     public RegisterBrokerResult registerBroker(
         final String clusterName,
         final String brokerAddr,
@@ -112,7 +129,7 @@ public class RouteInfoManager {
         try {
             try {
                 this.lock.writeLock().lockInterruptibly();
-
+                // 这里clusterName还不知道具体是什么值
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
@@ -133,12 +150,15 @@ public class RouteInfoManager {
 
                 if (null != topicConfigWrapper
                     && MixAll.MASTER_ID == brokerId) {
+                    // 第一个问题：如何判断broker版本号呢？就是比对版本号
+                    // 第二个问题：版本号变动了需要通知客户端吗？客户端需要关注版本号吗？如果是第一次注册或者broker变动了，就会重新创建topic对应的broker信息
                     if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())
                         || registerFirst) {
                         ConcurrentMap<String, TopicConfig> tcTable =
                             topicConfigWrapper.getTopicConfigTable();
                         if (tcTable != null) {
                             for (Map.Entry<String, TopicConfig> entry : tcTable.entrySet()) {
+                                // 重构topicTable下该broker信息
                                 this.createAndUpdateQueueData(brokerName, entry.getValue());
                             }
                         }
@@ -163,6 +183,7 @@ public class RouteInfoManager {
                     }
                 }
 
+                // 这段代码还没看
                 if (MixAll.MASTER_ID != brokerId) {
                     String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (masterAddr != null) {
@@ -277,6 +298,17 @@ public class RouteInfoManager {
         return wipeTopicCnt;
     }
 
+    /**
+     * 卸载broker，这个是由谁来调用的？Broker主动？还是liveTable检测到失效的Broker来调用的？
+     *
+     * 1）从livetable移除该broker
+     * 2）从addrtable将该broker移除（brokerName可能会有多个brokerAddr和id，所以这是只是删除brokerName下的某个broker而已）
+     * 3）如果brokerName下的所有broker都被卸载了，NameSrc将会把这个brokeName从clustertable中和topictable中删除该brokerName。
+     * @param clusterName
+     * @param brokerAddr
+     * @param brokerName
+     * @param brokerId
+     */
     public void unregisterBroker(
         final String clusterName,
         final String brokerAddr,
@@ -284,6 +316,7 @@ public class RouteInfoManager {
         final long brokerId) {
         try {
             try {
+                // register和unregister使用同一把lock
                 this.lock.writeLock().lockInterruptibly();
                 BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.remove(brokerAddr);
                 log.info("unregisterBroker, remove from brokerLiveTable {}, {}",
@@ -291,7 +324,7 @@ public class RouteInfoManager {
                     brokerAddr
                 );
 
-                this.filterServerTable.remove(brokerAddr);
+                this.filterServerTable.remove(brokerAddr);  // 这table先不管
 
                 boolean removeBrokerName = false;
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
@@ -415,6 +448,9 @@ public class RouteInfoManager {
         return null;
     }
 
+    /**
+     * 这个Broker2分钟都没通信了，就把该broker关掉
+     */
     public void scanNotActiveBroker() {
         Iterator<Entry<String, BrokerLiveInfo>> it = this.brokerLiveTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -429,6 +465,11 @@ public class RouteInfoManager {
         }
     }
 
+    /**
+     * 关闭channel这么多代码
+     * @param remoteAddr
+     * @param channel
+     */
     public void onChannelDestroy(String remoteAddr, Channel channel) {
         String brokerAddrFound = null;
         if (channel != null) {
@@ -741,6 +782,9 @@ public class RouteInfoManager {
     }
 }
 
+/**
+ * liveInfo里面居然有channel，那就是与客户端保持连接了
+ */
 class BrokerLiveInfo {
     private long lastUpdateTimestamp;
     private DataVersion dataVersion;

@@ -88,6 +88,8 @@ public class NamesrvController {
 
             @Override
             public void run() {
+                // 定期扫描broker的channel，判断channel是否存活
+                // 如果Broker超过2分钟都没通信，就把该broker关掉
                 NamesrvController.this.routeInfoManager.scanNotActiveBroker();
             }
         }, 5, 10, TimeUnit.SECONDS);
