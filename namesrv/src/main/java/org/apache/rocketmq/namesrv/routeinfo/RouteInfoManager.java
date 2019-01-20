@@ -400,6 +400,11 @@ public class RouteInfoManager {
         }
     }
 
+    /**
+     * 客户端根据topic获取route信息，该方法由客户端定期调用
+     * @param topic
+     * @return
+     */
     public TopicRouteData pickupTopicRouteData(final String topic) {
         TopicRouteData topicRouteData = new TopicRouteData();
         boolean foundQueueData = false;

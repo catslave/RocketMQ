@@ -64,6 +64,12 @@ public class TopAddressing {
         return fetchNSAddr(true, 3000);
     }
 
+    /**
+     * 原来是通过HTTP的方式来获取的，怎么没有走Netty TCP
+     * @param verbose
+     * @param timeoutMills
+     * @return
+     */
     public final String fetchNSAddr(boolean verbose, long timeoutMills) {
         String url = this.wsAddr;
         try {

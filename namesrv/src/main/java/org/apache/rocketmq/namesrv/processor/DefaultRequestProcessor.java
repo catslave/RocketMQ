@@ -101,7 +101,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
                 }
             case RequestCode.UNREGISTER_BROKER:
                 return this.unregisterBroker(ctx, request);
-            case RequestCode.GET_ROUTEINTO_BY_TOPIC:    // 这里是不是客户端主动来获取topic信息的，服务端并没有主动推送。采用pull模式。
+            case RequestCode.GET_ROUTEINTO_BY_TOPIC:    // 由客户端主动来获取topic信息，服务端并没有推送。采用pull模式。
                 // 为了验证这个想法，要看下客户端的代码里面有没有这个定期心跳
                 return this.getRouteInfoByTopic(ctx, request);
             case RequestCode.GET_BROKER_CLUSTER_INFO:
@@ -346,6 +346,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
         final GetRouteInfoRequestHeader requestHeader =
             (GetRouteInfoRequestHeader) request.decodeCommandCustomHeader(GetRouteInfoRequestHeader.class);
 
+        // 客户端接收到的就是TopicRouteData信息
         TopicRouteData topicRouteData = this.namesrvController.getRouteInfoManager().pickupTopicRouteData(requestHeader.getTopic());
 
         if (topicRouteData != null) {

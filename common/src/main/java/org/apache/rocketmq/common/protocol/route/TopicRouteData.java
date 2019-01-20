@@ -25,10 +25,13 @@ import java.util.HashMap;
 import java.util.List;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
+/**
+ * Topic对应的路由信息，里面应该包括了，哪些Broker可以接收Topic类信息
+ */
 public class TopicRouteData extends RemotingSerializable {
     private String orderTopicConf;
-    private List<QueueData> queueDatas;
-    private List<BrokerData> brokerDatas;
+    private List<QueueData> queueDatas; // brokerName - 可读可写队列数
+    private List<BrokerData> brokerDatas;   // brokerName 1-* brokerAddr 一一对应
     private HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public TopicRouteData cloneTopicRouteData() {

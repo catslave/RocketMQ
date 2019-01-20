@@ -152,6 +152,10 @@ import org.apache.rocketmq.remoting.protocol.LanguageCode;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
+/**
+ * DefaultRequestProcessor请求处理程序，里面定义了服务端可以处理的消息类型。
+ * MQClientAPIImpl封装了客户端与服务端通信的操作API，将客户端的每个请求都对应的封装成消息类型，然后发送给服务端。
+ */
 public class MQClientAPIImpl {
 
     private final static InternalLogger log = ClientLogger.getLog();

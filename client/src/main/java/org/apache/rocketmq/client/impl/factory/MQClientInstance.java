@@ -89,15 +89,21 @@ public class MQClientInstance {
     private final int instanceIndex;
     private final String clientId;
     private final long bootTimestamp = System.currentTimeMillis();
+    // ProducerTable里面保存的是什么，value是一个客户端实例，那key呢？是通过Reguster和UnRegitster方法来添加的。
     private final ConcurrentMap<String/* group */, MQProducerInner> producerTable = new ConcurrentHashMap<String, MQProducerInner>();
     private final ConcurrentMap<String/* group */, MQConsumerInner> consumerTable = new ConcurrentHashMap<String, MQConsumerInner>();
     private final ConcurrentMap<String/* group */, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<String, MQAdminExtInner>();
     private final NettyClientConfig nettyClientConfig;
     private final MQClientAPIImpl mQClientAPIImpl;
     private final MQAdminImpl mQAdminImpl;
+    // 这个table保存的信息是下一层的（由NameSrv返回回来的原始信息），Producer面向客户端，这个table保存了topic下有多少可读可写的队列数量和对应的brokers。
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<String, TopicRouteData>();
     private final Lock lockNamesrv = new ReentrantLock();
     private final Lock lockHeartbeat = new ReentrantLock();
+    /**
+     * 客户端实例也持有了一些table，应该都是跟broker或topic相关的信息
+     */
+    // brokerAddrTable 保存了brokerName下所有的brokerId和addr对应关系，这个信息也可以从TopicRouteData得到
     private final ConcurrentMap<String/* Broker Name */, HashMap<Long/* brokerId */, String/* address */>> brokerAddrTable =
         new ConcurrentHashMap<String, HashMap<Long, String>>();
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable =
@@ -156,6 +162,13 @@ public class MQClientInstance {
             MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
     }
 
+    /**
+     * 该方法是将NameSrv返回的topicRouteData转为客户端识别的topicPublishInfo
+     *  topicPublishInfo包含了topic-messagequeue的对应关系，这里的用一张图来说明会更清晰
+     * @param topic
+     * @param route
+     * @return
+     */
     public static TopicPublishInfo topicRouteData2TopicPublishInfo(final String topic, final TopicRouteData route) {
         TopicPublishInfo info = new TopicPublishInfo();
         info.setTopicRouteData(route);
@@ -257,7 +270,7 @@ public class MQClientInstance {
 
     private void startScheduledTask() {
         if (null == this.clientConfig.getNamesrvAddr()) {
-            // 定期主动获取NameSrv
+            // 如果客户端配置文件没有指定NameSrv地址，那会从指定的一个服务走HTTP方式获取NameSrv地址列表
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                 @Override
@@ -272,11 +285,23 @@ public class MQClientInstance {
         }
 
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
-
+            // 定时从NameSrv服务获取最新的topic信息，每3秒获取一次
+            // Producer和Consumer都会调用，说明Consumer也有这些Route信息
             @Override
             public void run() {
                 try {
+                    // update的路程：
+                    // 1.根据指定的Topic去NameSrv获取该Topic对应的Route信息，NameSrv返回TopicRouteData
+                    // 2.根据TopicRouteData判断本地维护的Topic - TopicRouteData表（topicRouteTable）是否需要update
+                    // 3.更新本地的BrokerName - BrokerAddrs<BrokerId - BrokerAddr>表（brokerAddrTable）
+                    // 3.将TopicRouteData构造成客户端可识别的TopicPublishInfo
+                    // 4.将TopicPublishInfo添加到本地维护的Topic - TopicPublishInfo表（topicPublishInfoTable）
                     MQClientInstance.this.updateTopicRouteInfoFromNameServer();
+
+                    // 这里可以提出问题，哪些本地表是Producer用到的，TopicPublishInfoTable应该是发送消息的时候用来选择队列的，其他的表应该是用来维护TopicRoute信息的。目前猜测。
+                    // 客户端总共三张表：
+                    // Instance保存两张原始表：topicRouteTable和brokerAddrTable
+                    // Impl保存一张表：TopicPublishInfoTable
                 } catch (Exception e) {
                     log.error("ScheduledTask updateTopicRouteInfoFromNameServer exception", e);
                 }
@@ -593,31 +618,38 @@ public class MQClientInstance {
                 try {
                     TopicRouteData topicRouteData;
                     if (isDefault && defaultMQProducer != null) {
+                        // isDefault默认false，如果使用true默认的，则topic使用“TBW102”。
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
                             1000 * 3);
                         if (topicRouteData != null) {
                             for (QueueData data : topicRouteData.getQueueDatas()) {
+                                // topic对应的读写队列数，控制在4个
                                 int queueNums = Math.min(defaultMQProducer.getDefaultTopicQueueNums(), data.getReadQueueNums());
                                 data.setReadQueueNums(queueNums);
                                 data.setWriteQueueNums(queueNums);
                             }
                         }
                     } else {
+                        // 获取指定的topic，同步方式获取
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        // 判断路由信息是否有变
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
+                            // 判断是否需要更新，从Producer的topic-messagequeues table里面判断，如果该table没有topic信息就更新。
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {
                             log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
                         }
 
                         if (changed) {
+                            // 要搞明白TopicRouteData是NameSrv返回的信息，客户端要根据这个data封装成自己需要的table。
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
 
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) {
+                                // 更新brokerAddr信息，brokerName 1-* brokerId和brokerAddr
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
 
@@ -847,6 +879,7 @@ public class MQClientInstance {
         }
     }
 
+    // Consumer init方法执行注册
     public boolean registerConsumer(final String group, final MQConsumerInner consumer) {
         if (null == group || null == consumer) {
             return false;
@@ -911,6 +944,7 @@ public class MQClientInstance {
         }
     }
 
+    // Producer start方法，执行注册
     public boolean registerProducer(final String group, final DefaultMQProducerImpl producer) {
         if (null == group || null == producer) {
             return false;
