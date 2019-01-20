@@ -45,6 +45,11 @@ import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 import org.apache.rocketmq.common.sysflag.TopicSysFlag;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 
+/**
+ * 保存所有的状态信息
+ *
+ * 1.broker信息变动如何通知客户端（这里的客户端应该是指Producer和Consumer，这两个都有监听NameSrv）
+ */
 public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
@@ -102,9 +107,11 @@ public class RouteInfoManager {
 
     /**
      * 注册做的事情
+     *  注意：这里没有通知客户端broker的变化，是由客户端主动来拉取broker信息的，代码实现在MQClientInstance的startScheduledTask里面。
+     *
      * 1）每次注册的时候会先将该broker添加到clusterAddrTable集群里面，clustertable value是set类型，所以旧的broker会被直接替换掉。
      * 2）然后将broker添加到brokerAddr集合中，brokerAddr的value是一个hashmap，因为一个broker可以是主备，所以一个brokername会有多个addr。
-     * 3）如果注册的这个broker为master节点，且版本号（每个注册上来的broker都会携带版本号）变动了的话就通知客户端broker有变。
+     * 3）如果注册的这个broker为master节点，且版本号（每个注册上来的broker都会携带版本号）变动了的话就重构topicTable。
      * 4）将该broker添加到livetable中，表示该节点可用
      * @param clusterName
      * @param brokerAddr

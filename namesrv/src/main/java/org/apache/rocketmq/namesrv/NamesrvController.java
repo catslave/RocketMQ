@@ -79,6 +79,7 @@ public class NamesrvController {
 
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 
+        // 使用固定线程池来处理客户端的请求 8个线程，NameSrv为什么要用固定的线程池？固定线程池为了控制并发数
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 

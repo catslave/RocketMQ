@@ -231,15 +231,15 @@ public class MQClientInstance {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
                     // Start request-response channel
-                    this.mQClientAPIImpl.start();
+                    this.mQClientAPIImpl.start();   // Producer和Consumer都使用
                     // Start various schedule tasks
                     this.startScheduledTask();
                     // Start pull service
-                    this.pullMessageService.start();
+                    this.pullMessageService.start();    // 这是Consumer使用的
                     // Start rebalance service
-                    this.rebalanceService.start();
+                    this.rebalanceService.start();  // 这应该也是Consumer用的
                     // Start push service
-                    this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
+                    this.defaultMQProducer.getDefaultMQProducerImpl().start(false); // 这是Producer用的吧
                     log.info("the client factory [{}] start OK", this.clientId);
                     this.serviceState = ServiceState.RUNNING;
                     break;
@@ -257,6 +257,7 @@ public class MQClientInstance {
 
     private void startScheduledTask() {
         if (null == this.clientConfig.getNamesrvAddr()) {
+            // 定期主动获取NameSrv
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                 @Override
