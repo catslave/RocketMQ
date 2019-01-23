@@ -324,7 +324,8 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         int queueIdInt = requestHeader.getQueueId();
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
-
+        // 这个topicConfig要是返回null怎么办？还是说Producer每次要发送消息的时候，都会先从NameSrv获取一条Broker才来发送？如果topic没有
+        // 就用默认的topic？
         if (queueIdInt < 0) {
             queueIdInt = Math.abs(this.random.nextInt() % 99999999) % topicConfig.getWriteQueueNums();
         }

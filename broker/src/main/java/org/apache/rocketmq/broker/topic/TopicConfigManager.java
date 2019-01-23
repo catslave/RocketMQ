@@ -45,7 +45,8 @@ public class TopicConfigManager extends ConfigManager {
     private static final long LOCK_TIMEOUT_MILLIS = 3000;
     private transient final Lock lockTopicConfigTable = new ReentrantLock();
 
-    private final ConcurrentMap<String, TopicConfig> topicConfigTable =
+    // 保存topic信息
+    private final ConcurrentMap<String/* TopicName */, TopicConfig> topicConfigTable =
         new ConcurrentHashMap<String, TopicConfig>(1024);
     private final DataVersion dataVersion = new DataVersion();
     private final Set<String> systemTopicList = new HashSet<String>();
@@ -68,7 +69,8 @@ public class TopicConfigManager extends ConfigManager {
         {
             // MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC
             if (this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
-                String topic = MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC;
+                // 默认自动创建Topic
+                String topic = MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC;  // TBW102
                 TopicConfig topicConfig = new TopicConfig(topic);
                 this.systemTopicList.add(topic);
                 topicConfig.setReadQueueNums(this.brokerController.getBrokerConfig()
@@ -77,6 +79,7 @@ public class TopicConfigManager extends ConfigManager {
                     .getDefaultTopicQueueNums());
                 int perm = PermName.PERM_INHERIT | PermName.PERM_READ | PermName.PERM_WRITE;
                 topicConfig.setPerm(perm);
+                // 所有默认的TOPIC是所有Broker都支持，那就是如何客户端没有手动创建topic，则都是使用所有的topic
                 this.topicConfigTable.put(topicConfig.getTopicName(), topicConfig);
             }
         }

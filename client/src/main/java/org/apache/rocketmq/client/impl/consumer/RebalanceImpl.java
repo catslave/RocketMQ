@@ -48,6 +48,7 @@ public abstract class RebalanceImpl {
     protected final ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = new ConcurrentHashMap<MessageQueue, ProcessQueue>(64);
     protected final ConcurrentMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable =
         new ConcurrentHashMap<String, Set<MessageQueue>>();
+    // 保存订阅的topic信息
     protected final ConcurrentMap<String /* topic */, SubscriptionData> subscriptionInner =
         new ConcurrentHashMap<String, SubscriptionData>();
     protected String consumerGroup;
@@ -230,7 +231,7 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-
+        // doRebalance居然会调用这个方法，把不属于自己订阅范围的消息删除
         this.truncateMessageQueueNotMyTopic();
     }
 
@@ -259,6 +260,8 @@ public abstract class RebalanceImpl {
             }
             case CLUSTERING: {
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
+                // 这个方法应该是获取Group下订阅了该topic的所有Consumers，对这些Consumers对平摊处理
+                // String保存的是当前所有Consumer的clientId，也就是MQClientInstance的clientId，规则是本机的IP地址@一些信息
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -281,6 +284,8 @@ public abstract class RebalanceImpl {
 
                     List<MessageQueue> allocateResult = null;
                     try {
+                        // 这个方法是分担吗？每个Consumer都会调用这个方法，那是如何保证不冲突呢？
+                        // Consumer负载均衡处理完后，集群模型下每个Consumer都分配到了对应数量的消息队列
                         allocateResult = strategy.allocate(
                             this.consumerGroup,
                             this.mQClientFactory.getClientId(),
@@ -297,6 +302,7 @@ public abstract class RebalanceImpl {
                         allocateResultSet.addAll(allocateResult);
                     }
 
+                    // 这是更新给谁？broker？
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, allocateResultSet, isOrder);
                     if (changed) {
                         log.info(
@@ -314,6 +320,7 @@ public abstract class RebalanceImpl {
     }
 
     private void truncateMessageQueueNotMyTopic() {
+        // 难道Consumer会收到所有的消息？然后在本地过滤？
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
 
         for (MessageQueue mq : this.processQueueTable.keySet()) {
@@ -328,6 +335,13 @@ public abstract class RebalanceImpl {
         }
     }
 
+    /**
+     * rebalance后，每个Consumer实例将自己本地的processQueueTable过滤掉？
+     * @param topic
+     * @param mqSet
+     * @param isOrder
+     * @return
+     */
     private boolean updateProcessQueueTableInRebalance(final String topic, final Set<MessageQueue> mqSet,
         final boolean isOrder) {
         boolean changed = false;

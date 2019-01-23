@@ -54,11 +54,20 @@ public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    // 1. topic 1-* brokerName 信息（Master和Slave的BrokerName是一样的）
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+    // 2. brokerName 1-* brokerId&brokerAdd
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+
+    // 3. clusterName 1-* brokerName
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+
+    // 4. brokerAddr 1-1 状态信息
     // BrokeLiveInfo里面有channel，所以livetable保存了brokerAddr对应的channel，那谁来维护呢？
+    // NameSrv会定期（10s）扫描该table，检查broker是否存活
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+
+    // 5. 服务端过滤方式 brokerAddr 1-* 多种过滤服务地址 目前还没了解
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public RouteInfoManager() {
@@ -174,7 +183,7 @@ public class RouteInfoManager {
 
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                     new BrokerLiveInfo(
-                        System.currentTimeMillis(),
+                        System.currentTimeMillis(), // 当前时间作为时间戳，好像只有这里才有更新，难道broker会定期register？来当做心跳？
                         topicConfigWrapper.getDataVersion(),
                         channel,
                         haServerAddr));
@@ -798,7 +807,7 @@ public class RouteInfoManager {
  * liveInfo里面居然有channel，那就是与客户端保持连接了
  */
 class BrokerLiveInfo {
-    private long lastUpdateTimestamp;
+    private long lastUpdateTimestamp;   // NameSrv会定期检查该时间戳来判定该channel是否存活，那这个时间戳在哪里更新了？
     private DataVersion dataVersion;
     private Channel channel;
     private String haServerAddr;

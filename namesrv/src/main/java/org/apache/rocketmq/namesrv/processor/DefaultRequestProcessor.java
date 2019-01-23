@@ -92,6 +92,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
                 return this.deleteKVConfig(ctx, request);
             case RequestCode.QUERY_DATA_VERSION:
                 return queryBrokerTopicConfig(ctx, request);
+
             case RequestCode.REGISTER_BROKER:   // broker注册
                 Version brokerVersion = MQVersion.value2Version(request.getVersion());
                 if (brokerVersion.ordinal() >= MQVersion.Version.V3_0_11.ordinal()) {
@@ -101,6 +102,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
                 }
             case RequestCode.UNREGISTER_BROKER:
                 return this.unregisterBroker(ctx, request);
+
             case RequestCode.GET_ROUTEINTO_BY_TOPIC:    // 由客户端主动来获取topic信息，服务端并没有推送。采用pull模式。
                 // 为了验证这个想法，要看下客户端的代码里面有没有这个定期心跳
                 return this.getRouteInfoByTopic(ctx, request);
@@ -280,6 +282,14 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
         return response;
     }
 
+    /**
+     * Broker上报topic信息
+     *  多个Broker对应一个topic
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
     public RemotingCommand registerBroker(ChannelHandlerContext ctx,
         RemotingCommand request) throws RemotingCommandException {
         final RemotingCommand response = RemotingCommand.createResponseCommand(RegisterBrokerResponseHeader.class);

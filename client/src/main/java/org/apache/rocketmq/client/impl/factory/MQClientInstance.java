@@ -302,7 +302,11 @@ public class MQClientInstance {
                     // 客户端总共三张表：
                     // Instance保存两张原始表：topicRouteTable和brokerAddrTable
                     // Impl保存一张表：TopicPublishInfoTable
+
+                    // 第二个问题，如果配置了多个NameSrv，那客户端拉取的逻辑是什么？用最新的更新之前的？还是比对交集？
                 } catch (Exception e) {
+
+                    // 这里是不是可以认为，即使NameSrv挂了，客户端也不会挂，只是还会定期发送请求而已
                     log.error("ScheduledTask updateTopicRouteInfoFromNameServer exception", e);
                 }
             }
@@ -477,6 +481,7 @@ public class MQClientInstance {
         if (this.lockHeartbeat.tryLock()) {
             try {
                 this.sendHeartbeatToAllBroker();
+                // Consumner启动，断点调试了根本不是这里。那是哪里订阅消息了？
                 this.uploadFilterClassSource();
             } catch (final Exception e) {
                 log.error("sendHeartbeatToAllBroker exception", e);
@@ -611,6 +616,15 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 主动向NameSrv拉取topic信息
+     *  1.定期线程会执行
+     *  2.如果是新的topic也会执行
+     * @param topic
+     * @param isDefault
+     * @param defaultMQProducer
+     * @return
+     */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
         try {
@@ -618,7 +632,8 @@ public class MQClientInstance {
                 try {
                     TopicRouteData topicRouteData;
                     if (isDefault && defaultMQProducer != null) {
-                        // isDefault默认false，如果使用true默认的，则topic使用“TBW102”。
+                        // isDefault默认false，如果使用true默认的，则topic使用“TBW102”topic的队列信息。那这个默认队列的信息都哪些呢？
+                        // 是分布在哪些broker呢？还是所有broker都提供默认topic支持。
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
                             1000 * 3);
                         if (topicRouteData != null) {
@@ -779,6 +794,7 @@ public class MQClientInstance {
             while (it.hasNext()) {
                 Entry<String, List<String>> next = it.next();
                 List<String> value = next.getValue();
+                // 向所有的都注册，这个所有是指什么？
                 for (final String fsAddr : value) {
                     try {
                         this.mQClientAPIImpl.registerMessageFilterClass(fsAddr, consumerGroup, topic, fullClassName, classCRC, classBody,

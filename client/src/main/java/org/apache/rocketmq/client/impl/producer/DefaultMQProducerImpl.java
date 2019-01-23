@@ -639,14 +639,18 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
         if (null == topicPublishInfo || !topicPublishInfo.ok()) {
+            // 如果是新的Topic，会使用默认的TopicPublishInfo添加到集合中
             this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
+            // 然后Producer会试着拉取下NameSrv，看是否有该topic的信息
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
         }
 
         if (topicPublishInfo.isHaveTopicRouterInfo() || topicPublishInfo.ok()) {
+            // 如果NameSrv存在该topic信息，直接返回
             return topicPublishInfo;
         } else {
+            // 如果没有该topic信息，则使用默认topic信息
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
             return topicPublishInfo;

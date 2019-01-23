@@ -58,11 +58,18 @@ import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.netty.NettyRemotingClient;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/**
+ * RemotingClient，所以这个API是用来与服务端进行通信的。那这个服务端就可以先假设是NameSrv了。看了API方法可以肯定就是NameSrv了
+ * 这个类封装了与NameSrv通信的所有操作。
+ *
+ * Broker主要是要定期向NameSrv上报topic数据，也就是register
+ */
 public class BrokerOuterAPI {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private final RemotingClient remotingClient;
     private final TopAddressing topAddressing = new TopAddressing(MixAll.getWSAddr());
     private String nameSrvAddr = null;
+    // 固定线程池用于执行broker上报的
     private BrokerFixedThreadPoolExecutor brokerOuterExecutor = new BrokerFixedThreadPoolExecutor(4, 10, 1, TimeUnit.MINUTES,
         new ArrayBlockingQueue<Runnable>(32), new ThreadFactoryImpl("brokerOutApi_thread_", true));
 
@@ -76,6 +83,7 @@ public class BrokerOuterAPI {
     }
 
     public void start() {
+        // 启动了一个客户端
         this.remotingClient.start();
     }
 
@@ -111,6 +119,20 @@ public class BrokerOuterAPI {
         this.remotingClient.updateNameServerAddressList(lst);
     }
 
+    /**
+     * 该方法会被定期执行
+     * @param clusterName
+     * @param brokerAddr
+     * @param brokerName
+     * @param brokerId
+     * @param haServerAddr
+     * @param topicConfigWrapper
+     * @param filterServerList
+     * @param oneway
+     * @param timeoutMills
+     * @param compressed
+     * @return
+     */
     public List<RegisterBrokerResult> registerBrokerAll(
         final String clusterName,
         final String brokerAddr,
@@ -141,12 +163,16 @@ public class BrokerOuterAPI {
             final byte[] body = requestBody.encode(compressed);
             final int bodyCrc32 = UtilAll.crc32(body);
             requestHeader.setBodyCrc32(bodyCrc32);
+            // 这里使用coutDownLatch变量，不对不对，这个作用是什么？
             final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
+            // 如果配置了NameSrv集群就要给每个NameSrv上报数据
             for (final String namesrvAddr : nameServerAddressList) {
                 brokerOuterExecutor.execute(new Runnable() {
+                    // 上报任务被提交到了一个线程池中来执行
                     @Override
                     public void run() {
                         try {
+                            // 调用registerBroker方法
                             RegisterBrokerResult result = registerBroker(namesrvAddr,oneway, timeoutMills,requestHeader,body);
                             if (result != null) {
                                 registerBrokerResultList.add(result);
@@ -156,6 +182,7 @@ public class BrokerOuterAPI {
                         } catch (Exception e) {
                             log.warn("registerBroker Exception, {}", namesrvAddr, e);
                         } finally {
+                            // 上报完后会countDown
                             countDownLatch.countDown();
                         }
                     }
@@ -163,6 +190,7 @@ public class BrokerOuterAPI {
             }
 
             try {
+                // 当前线程会被阻塞，知道向所有NameSrv都上报完数据才会返回
                 countDownLatch.await(timeoutMills, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
             }
@@ -171,6 +199,21 @@ public class BrokerOuterAPI {
         return registerBrokerResultList;
     }
 
+    /**
+     * 这个register方法是由谁来调用的呢？
+     * @param namesrvAddr
+     * @param oneway
+     * @param timeoutMills
+     * @param requestHeader
+     * @param body
+     * @return
+     * @throws RemotingCommandException
+     * @throws MQBrokerException
+     * @throws RemotingConnectException
+     * @throws RemotingSendRequestException
+     * @throws RemotingTimeoutException
+     * @throws InterruptedException
+     */
     private RegisterBrokerResult registerBroker(
         final String namesrvAddr,
         final boolean oneway,

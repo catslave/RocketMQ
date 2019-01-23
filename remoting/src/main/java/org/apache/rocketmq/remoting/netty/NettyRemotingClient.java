@@ -77,11 +77,20 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final Bootstrap bootstrap = new Bootstrap();
     private final EventLoopGroup eventLoopGroupWorker;
     private final Lock lockChannelTables = new ReentrantLock();
+
+    // channelTables里的channel被移除的场景有哪些？连接中断、移除、主动关闭，还有什么？
     private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<String, ChannelWrapper>();
 
+    // 处理发送超时请求的，定时器监听所有已发送的请求，如果超时服务端还未返回消息，则取消该请求。
+    // 主要用在监听同步和异步发送方式
     private final Timer timer = new Timer("ClientHouseKeepingService", true);
 
+    /**
+     * 以下四个变量都是跟选择NameSrv逻辑相关
+     */
+    // 保存从配置的NameSrv集群，如果有多个NameSrv的话。但是只会选择其中一条进行通信。
     private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<List<String>>();
+    // 保存当前选择的一条NameSrv进行通信
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<String>();
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex());
     private final Lock lockNamesrvChannel = new ReentrantLock();
@@ -396,6 +405,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     private Channel getAndCreateChannel(final String addr) throws InterruptedException {
         if (null == addr) {
+            // 如果发送时候没指定服务端addr，则表明是跟NameSrv通信而不是Broker
             return getAndCreateNameserverChannel();
         }
 
@@ -429,11 +439,13 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
                 if (addrList != null && !addrList.isEmpty()) {
                     for (int i = 0; i < addrList.size(); i++) {
+                        // 如果配置了多个NameSrv，想根据一定规则从里面选择一个NameSrv进行通信
                         int index = this.namesrvIndex.incrementAndGet();
                         index = Math.abs(index);
                         index = index % addrList.size();
                         String newAddr = addrList.get(index);
 
+                        // 看源码发现其实客户端一次只会与一个NameSrv进行交互，如果这个NameSrv不可用了才会切换下一个NameSrv。
                         this.namesrvAddrChoosed.set(newAddr);
                         log.info("new name server is chosen. OLD: {} , NEW: {}. namesrvIndex = {}", addr, newAddr, namesrvIndex);
                         Channel channelNew = this.createChannel(newAddr);
