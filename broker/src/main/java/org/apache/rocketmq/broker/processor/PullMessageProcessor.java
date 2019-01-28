@@ -246,12 +246,13 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         }
 
         // 这里去messageStore读消息量了
-        // 参数传了queueId和queueOffset
+        // 参数传了queueId和queueOffset，offset是由Consumer发来的，Consumer读取local或者remote来获取offset
         final GetMessageResult getMessageResult =
             this.brokerController.getMessageStore().getMessage(requestHeader.getConsumerGroup(), requestHeader.getTopic(),
                 requestHeader.getQueueId(), requestHeader.getQueueOffset(), requestHeader.getMaxMsgNums(), messageFilter);
         if (getMessageResult != null) {
             response.setRemark(getMessageResult.getStatus().name());
+            // 再次请求从这个offset开始
             responseHeader.setNextBeginOffset(getMessageResult.getNextBeginOffset());
             responseHeader.setMinOffset(getMessageResult.getMinOffset());
             responseHeader.setMaxOffset(getMessageResult.getMaxOffset());
@@ -478,6 +479,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         storeOffsetEnable = storeOffsetEnable
             && this.brokerController.getMessageStoreConfig().getBrokerRole() != BrokerRole.SLAVE;
         if (storeOffsetEnable) {
+            // 这里是把offset提交了吗
             this.brokerController.getConsumerOffsetManager().commitOffset(RemotingHelper.parseChannelRemoteAddr(channel),
                 requestHeader.getConsumerGroup(), requestHeader.getTopic(), requestHeader.getQueueId(), requestHeader.getCommitOffset());
         }

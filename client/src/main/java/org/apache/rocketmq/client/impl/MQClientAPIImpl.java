@@ -560,6 +560,18 @@ public class MQClientAPIImpl {
         throw new MQBrokerException(response.getCode(), response.getRemark());
     }
 
+    /**
+     * 拉取消息
+     * @param addr
+     * @param requestHeader
+     * @param timeoutMillis
+     * @param communicationMode
+     * @param pullCallback
+     * @return
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     */
     public PullResult pullMessage(
         final String addr,
         final PullMessageRequestHeader requestHeader,
@@ -815,6 +827,16 @@ public class MQClientAPIImpl {
         throw new MQBrokerException(response.getCode(), response.getRemark());
     }
 
+    /**
+     * 集群模式，到远程Broker查询该Consumer的消费进度offset
+     * @param addr
+     * @param requestHeader
+     * @param timeoutMillis
+     * @return
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     */
     public long queryConsumerOffset(
         final String addr,
         final QueryConsumerOffsetRequestHeader requestHeader,

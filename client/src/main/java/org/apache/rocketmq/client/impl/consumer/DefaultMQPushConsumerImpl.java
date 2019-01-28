@@ -284,6 +284,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
         final long beginTimestamp = System.currentTimeMillis();
 
+        // 定义了回调函数
         PullCallback pullCallback = new PullCallback() {
             @Override
             public void onSuccess(PullResult pullResult) {
@@ -308,6 +309,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                                 DefaultMQPushConsumerImpl.this.getConsumerStatsManager().incPullTPS(pullRequest.getConsumerGroup(),
                                     pullRequest.getMessageQueue().getTopic(), pullResult.getMsgFoundList().size());
 
+                                // 将消息放到processQueue
                                 boolean dispatchToConsume = processQueue.putMessage(pullResult.getMsgFoundList());
                                 DefaultMQPushConsumerImpl.this.consumeMessageService.submitConsumeRequest(
                                     pullResult.getMsgFoundList(),
@@ -391,6 +393,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         boolean commitOffsetEnable = false;
         long commitOffsetValue = 0L;
         if (MessageModel.CLUSTERING == this.defaultMQPushConsumer.getMessageModel()) {
+            // 如果是集群模式，从remoteStore读取offset，这里是从当前内存读，就没有请求Broker了
             commitOffsetValue = this.offsetStore.readOffset(pullRequest.getMessageQueue(), ReadOffsetType.READ_FROM_MEMORY);
             if (commitOffsetValue > 0) {
                 commitOffsetEnable = true;
@@ -576,14 +579,15 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                     this.defaultMQPushConsumer.getConsumerGroup(), isUnitMode());
                 this.pullAPIWrapper.registerFilterMessageHook(filterMessageHookList);
 
+                // 这里加载offset了
                 if (this.defaultMQPushConsumer.getOffsetStore() != null) {
                     this.offsetStore = this.defaultMQPushConsumer.getOffsetStore();
                 } else {
                     switch (this.defaultMQPushConsumer.getMessageModel()) {
-                        case BROADCASTING:
+                        case BROADCASTING: // 广播 local，从本地文件加载消费进度，持久化json写入文件
                             this.offsetStore = new LocalFileOffsetStore(this.mQClientFactory, this.defaultMQPushConsumer.getConsumerGroup());
                             break;
-                        case CLUSTERING:
+                        case CLUSTERING:    // 集群 remote，从Broker获取消费进度，持久化会更新到Broker上
                             this.offsetStore = new RemoteBrokerOffsetStore(this.mQClientFactory, this.defaultMQPushConsumer.getConsumerGroup());
                             break;
                         default:

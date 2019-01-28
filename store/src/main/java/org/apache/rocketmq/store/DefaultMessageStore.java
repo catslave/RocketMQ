@@ -536,6 +536,8 @@ public class DefaultMessageStore implements MessageStore {
                                 continue;
                             }
 
+                            // 从commitLog读取消息，offset指定位置，size数据大小
+                            // 具体读消息后面结合文件存储在一起看
                             SelectMappedBufferResult selectResult = this.commitLog.getMessage(offsetPy, sizePy);
                             if (null == selectResult) {
                                 if (getResult.getBufferTotalSize() == 0) {

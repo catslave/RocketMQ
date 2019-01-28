@@ -248,9 +248,9 @@ public class MQClientInstance {
                     // Start various schedule tasks
                     this.startScheduledTask();
                     // Start pull service
-                    this.pullMessageService.start();    // 这是Consumer使用的
+                    this.pullMessageService.start();    // 这是Consumer使用的，是处理已经回来的消息的
                     // Start rebalance service
-                    this.rebalanceService.start();  // 这应该也是Consumer用的
+                    this.rebalanceService.start();  // 这应该也是Consumer用的，集群模式客户端负载均衡用的，分配queue
                     // Start push service
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false); // 这是Producer用的吧
                     log.info("the client factory [{}] start OK", this.clientId);

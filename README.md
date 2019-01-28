@@ -64,7 +64,10 @@ NameSrv就必须也要维护Slave的节点信息了。
 
 9. 消息存储模型！
 答：难道每个Broker都有一个CommitLog。为什么会有多个ConsumerQueue，好像ConsumerQueue是根据Topic来划分的。
-
+10. 每个Consumer都确认了自己要消费的Queue后，由谁来保存消费进度的呢？
+11. Broker何时更新offset？应该是客户端根据offset拉取到消息后，消费成功，再update offset。Consumer再pull消息的时候一定
+要控制好offset。
+答：记得之前文章有看到过，即使consumer有提供offset，broker是不是还是根据自己本地的broker来读取offset的。
 
 ## Consumer
 
@@ -76,6 +79,9 @@ MQClientInstance要从Consumer角度来分析了。
 2. Consumer订阅消息方式？
 答：这里还没看明白。一直在想有没有可能是先拉取消息再过滤。能不能这解释，Consumer只有pull_message这一种请求类型
 3. 这里就可以展开，offset是谁来保存？
+4. 哪个方法发起pull message？每次pull多少数据，从哪里pull，pull什么数据。
+每次rebalance的时候会pull下
+
 
 ## Producer
 
